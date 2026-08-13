@@ -1,0 +1,59 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root, [data-theme="light"] {
+    --bg: #f0f4f8;
+    --surface: #ffffff;
+    --surface2: #f5f7fa;
+    --surface3: #eaeef3;
+    --border: rgba(0,0,0,0.08);
+    --border2: rgba(0,0,0,0.14);
+    --accent: #0369a1;
+    --accent2: #0ea5e9;
+    --accent-glow: rgba(3,105,161,0.12);
+    --success: #059669;
+    --warning: #d97706;
+    --danger: #dc2626;
+    --text: #0f172a;
+    --text2: #475569;
+    --text3: #94a3b8;
+    --sidebar-bg: #0f172a;
+    --sidebar-text: #cbd5e1;
+    --sidebar-text2: #64748b;
+    --sidebar-active: rgba(14,165,233,0.15);
+    --sidebar-active-text: #38bdf8;
+    --sidebar-border: rgba(255,255,255,0.07);
+  }
+
+  [data-theme="dark"] {
+    --bg: #080d14;
+    --surface: #0e1620;
+    --surface2: #141e2d;
+    --surface3: #1a2638;
+    --border: rgba(255,255,255,0.07);
+    --border2: rgba(255,255,255,0.12);
+    --accent: #0ea5e9;
+    --accent2: #38bdf8;
+    --accent-glow: rgba(14,165,233,0.18);
+    --success: #10b981;
+    --warning: #f59e0b;
+    --danger: #ef4444;
+    --text: #f0f6ff;
+    --text2: #8ba3c0;
+    --text3: #4d6480;
+    --sidebar-bg: #070c12;
+    --sidebar-text: #8ba3c0;
+    --sidebar-text2: #4d6480;
+    --sidebar-active: rgba(14,165,233,0.15);
+    --sidebar-active-text: #38bdf8;
+    --sidebar-border: rgba(255,255,255,0.05);
+  }
+
+  body {
+    @apply font-sans antialiased;
+    background-color: var(--bg);
+    color: var(--text);
+  }
+}

@@ -1,0 +1,497 @@
+import React, { useEffect, useRef } from 'react';
+import { Chart as ChartJS, registerables } from 'chart.js';
+import { filtrarPorRegiao } from '../utils/constants';
+
+ChartJS.register(...registerables);
+
+// Plugins Oficiais do index.legacy.html
+const pluginBarLabels = {
+  id: 'barLabels',
+  afterDatasetsDraw(chart) {
+    const { ctx } = chart;
+    const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark';
+    chart.data.datasets.forEach((dataset, i) => {
+      const meta = chart.getDatasetMeta(i);
+      if (meta.type !== 'bar') return;
+      meta.data.forEach((bar, j) => {
+        const val = dataset.data[j];
+        if (!val) return;
+        ctx.save();
+        ctx.fillStyle = isDarkMode ? '#e2eaf4' : '#1e293b';
+        ctx.font = 'bold 10px "Plus Jakarta Sans",sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        const fmt = dataset.label && dataset.label.includes('R$')
+          ? 'R$' + Number(val).toLocaleString('pt-BR', { maximumFractionDigits: 0 })
+          : String(val);
+        ctx.fillText(fmt, bar.x, bar.y - 3);
+        ctx.restore();
+      });
+    });
+  }
+};
+
+const pluginDoughnutLabels = {
+  id: 'doughnutLabels',
+  afterDatasetsDraw(chart) {
+    const { ctx } = chart;
+    chart.data.datasets.forEach((dataset, i) => {
+      const meta = chart.getDatasetMeta(i);
+      if (meta.type !== 'doughnut' && meta.type !== 'pie') return;
+      meta.data.forEach((arc, j) => {
+        const val = dataset.data[j];
+        if (!val) return;
+        const total = dataset.data.reduce((s, v) => s + (v || 0), 0);
+        const pct = Math.round(val / total * 100);
+        if (pct < 5) return; 
+
+        const startAngle = arc.startAngle;
+        const endAngle = arc.endAngle;
+        const midAngle = (startAngle + endAngle) / 2;
+        const r = (arc.outerRadius + arc.innerRadius) / 2;
+        const x = arc.x + Math.cos(midAngle) * r;
+        const y = arc.y + Math.sin(midAngle) * r;
+        ctx.save();
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 11px "Plus Jakarta Sans",sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.shadowColor = 'rgba(0,0,0,0.4)';
+        ctx.shadowBlur = 3;
+        ctx.fillText(val, x, y);
+        ctx.restore();
+      });
+    });
+  }
+};
+
+export default function DashboardPage({ tecnicos = [], atps = [], ferramentas = [], veiculos = [], regiaoAtual = 'TODOS' }) {
+  const baseTecnicos = tecnicos.length > 0 ? tecnicos : [
+    ...Array(18).fill({ nome: 'Técnico SP', estado: 'SP', uf: 'SP', status: 'ativo', perfil: 'tecnico', funcao: 'TÉCNICO DE SUPORTE JR' }),
+    ...Array(12).fill({ nome: 'Técnico PR', estado: 'PR', uf: 'PR', status: 'ativo', perfil: 'tecnico', funcao: 'TÉCNICO EM INFORMÁTICA' }),
+    ...Array(10).fill({ nome: 'Técnico PE', estado: 'PE', uf: 'PE', status: 'ativo', perfil: 'tecnico', funcao: 'TÉCNICO EM INFORMÁTICA' }),
+    ...Array(8).fill({ nome: 'Técnico MG', estado: 'MG', uf: 'MG', status: 'ativo', perfil: 'tecnico', funcao: 'TÉCNICO DE SUPORTE JR' }),
+    ...Array(6).fill({ nome: 'Técnico SC', estado: 'SC', uf: 'SC', status: 'ativo', perfil: 'tecnico', funcao: 'TÉCNICO EM INFORMÁTICA' }),
+    ...Array(5).fill({ nome: 'Técnico RS', estado: 'RS', uf: 'RS', status: 'ativo', perfil: 'tecnico', funcao: 'TÉCNICO EM INFORMÁTICA' }),
+    ...Array(4).fill({ nome: 'Técnico PB', estado: 'PB', uf: 'PB', status: 'ativo', perfil: 'tecnico', funcao: 'Outros' }),
+    ...Array(3).fill({ nome: 'Técnico RJ', estado: 'RJ', uf: 'RJ', status: 'ativo', perfil: 'tecnico', funcao: 'Outros' }),
+    ...Array(3).fill({ nome: 'Técnico CE', estado: 'CE', uf: 'CE', status: 'ativo', perfil: 'tecnico', funcao: 'Outros' }),
+    ...Array(3).fill({ nome: 'Técnico RO', estado: 'RO', uf: 'RO', status: 'ativo', perfil: 'tecnico', funcao: 'Outros' })
+  ];
+
+  const tecsFiltrados = filtrarPorRegiao(baseTecnicos, regiaoAtual, 'uf');
+  const atpsFiltradas = filtrarPorRegiao(atps, regiaoAtual, 'uf');
+
+  const totalTec = tecsFiltrados.length;
+  const tecAtivos = tecsFiltrados.filter(t => t.status !== 'inativo').length;
+  const totalAtps = atps.length || 18;
+  const totalEstoque = ferramentas.reduce((acc, f) => acc + (Number(f.qtdTotal || f.quantidade) || 0), 0) || 37;
+
+  // Variáveis visuais
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const tc = isDark ? '#8ba3c0' : '#94a3b8';
+  const gc = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
+  const bgSurface = isDark ? '#0e1620' : '#fff';
+  const coresNeutras = [
+    'rgba(3,105,161,0.85)','rgba(3,105,161,0.65)','rgba(3,105,161,0.5)',
+    'rgba(14,165,233,0.75)','rgba(14,165,233,0.55)','rgba(14,165,233,0.4)',
+    'rgba(56,189,248,0.7)','rgba(56,189,248,0.5)','rgba(125,211,252,0.7)',
+    'rgba(186,230,253,0.8)'
+  ];
+
+  // Cálculos
+  const estadosCount = {};
+  tecsFiltrados.forEach(t => {
+    const uf = (t.uf || t.estado || '').toUpperCase();
+    if (uf) estadosCount[uf] = (estadosCount[uf] || 0) + 1;
+  });
+  const estList = Object.entries(estadosCount).sort((a, b) => b[1] - a[1]).slice(0, 10);
+
+  const funcoesCount = {};
+  tecsFiltrados.forEach(t => {
+    const f = (t.funcao || 'Outros').replace(/\s*\(MA\)\s*/g, '').trim();
+    funcoesCount[f] = (funcoesCount[f] || 0) + 1;
+  });
+  const fList = Object.entries(funcoesCount).sort((a, b) => b[1] - a[1]).slice(0, 6);
+
+  const frota = { emUso: 170, disponivel: 31 };
+
+  const hoje = new Date();
+  const mesesLabels = [], mesesEmFerias = [], mesesEntrando = [];
+  for (let i = 0; i < 3; i++) {
+    const m = new Date(hoje.getFullYear(), hoje.getMonth() + i, 1);
+    mesesLabels.push(m.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }));
+    mesesEmFerias.push(i === 1 || i === 2 ? 1 : 0);
+    mesesEntrando.push(i === 2 ? 1 : 0);
+  }
+
+  const chartEstadosRef = useRef(null);
+  const chartFuncoesRef = useRef(null);
+  const chartVeiculosRef = useRef(null);
+  const chartFeriasDashRef = useRef(null);
+  const chartPerdasRef = useRef(null);
+  const chartCustoRef = useRef(null);
+  const chartKitsRef = useRef(null);
+
+  const canvasEstadosRef = useRef(null);
+  const canvasFuncoesRef = useRef(null);
+  const canvasVeiculosRef = useRef(null);
+  const canvasFeriasDashRef = useRef(null);
+  const canvasPerdasRef = useRef(null);
+  const canvasCustoRef = useRef(null);
+  const canvasKitsDashRef = useRef(null);
+
+  const chartDataHash = JSON.stringify({ estList, fList, mesesEmFerias, mesesEntrando, regiaoAtual, isDark });
+
+  useEffect(() => {
+      if (chartEstadosRef.current) chartEstadosRef.current.destroy();
+      const canvasEstados = canvasEstadosRef.current;
+      if (canvasEstados) {
+        chartEstadosRef.current = new ChartJS(canvasEstados, {
+          type: 'bar',
+          data: {
+            labels: estList.map(e => e[0]),
+            datasets: [{
+              data: estList.map(e => e[1]),
+              backgroundColor: estList.map((_, i) => coresNeutras[i % coresNeutras.length]),
+              borderWidth: 0,
+              borderRadius: 5
+            }]
+          },
+          plugins: [pluginBarLabels],
+          options: {
+            responsive: true, maintainAspectRatio: false,
+            responsive: true, maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                backgroundColor: isDark ? '#0e1620' : '#fff', titleColor: isDark ? '#f0f6ff' : '#0f172a',
+                bodyColor: tc, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)', borderWidth: 1,
+                callbacks: { label: ctx => `${ctx.parsed.y} técnico${ctx.parsed.y !== 1 ? 's' : ''}` }
+              }
+            },
+            scales: {
+              x: { grid: { display: false }, ticks: { color: tc, font: { size: 11 } } },
+              y: { grid: { color: gc }, ticks: { color: tc, font: { size: 10 }, stepSize: 1 }, beginAtZero: true,
+                suggestedMax: (Math.max(...estList.map(e => e[1] || 0), 1)) + 1
+              }
+            }
+          }
+        });
+      }
+
+      if (chartFuncoesRef.current) chartFuncoesRef.current.destroy();
+      const canvasFuncoes = canvasFuncoesRef.current;
+      if (canvasFuncoes) {
+        chartFuncoesRef.current = new ChartJS(canvasFuncoes, {
+          type: 'doughnut',
+          data: { labels: fList.map(f => f[0]), datasets: [{ data: fList.map(f => f[1]), backgroundColor: coresNeutras, borderWidth: 2, borderColor: bgSurface }] },
+          plugins: [pluginDoughnutLabels],
+          options: {
+            responsive: true, maintainAspectRatio: false,
+            responsive: true, maintainAspectRatio: false,
+            plugins: {
+              legend: { position: 'bottom', labels: { color: tc, font: { size: 11 }, boxWidth: 10, padding: 10 } },
+              tooltip: { backgroundColor: isDark ? '#0e1620' : '#fff', titleColor: isDark ? '#f0f6ff' : '#0f172a', bodyColor: tc, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)', borderWidth: 1 }
+            }
+          }
+        });
+      }
+
+      if (chartVeiculosRef.current) chartVeiculosRef.current.destroy();
+      const canvasVeiculos = canvasVeiculosRef.current;
+      if (canvasVeiculos) {
+        chartVeiculosRef.current = new ChartJS(canvasVeiculos, {
+          type: 'doughnut',
+          data: {
+            labels: ['Em uso', 'Disponível'],
+            datasets: [{ data: [frota.emUso, frota.disponivel], backgroundColor: ['rgba(14,165,233,0.8)', 'rgba(148,163,184,0.35)'], borderWidth: 2, borderColor: bgSurface }]
+          },
+          plugins: [pluginDoughnutLabels],
+          options: {
+            responsive: true, maintainAspectRatio: false,
+            responsive: true, maintainAspectRatio: false,
+            plugins: {
+              legend: { position: 'bottom', labels: { color: tc, font: { size: 11 }, boxWidth: 10, padding: 10 } },
+              tooltip: { backgroundColor: isDark ? '#0e1620' : '#fff', titleColor: isDark ? '#f0f6ff' : '#0f172a', bodyColor: tc, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)', borderWidth: 1 }
+            }
+          }
+        });
+      }
+
+      if (chartFeriasDashRef.current) chartFeriasDashRef.current.destroy();
+      const canvasFerias = canvasFeriasDashRef.current;
+      if (canvasFerias) {
+        chartFeriasDashRef.current = new ChartJS(canvasFerias, {
+          type: 'bar',
+          data: {
+            labels: mesesLabels,
+            datasets: [
+              { label: 'Em férias no mês', data: mesesEmFerias, backgroundColor: 'rgba(14,165,233,0.7)', borderRadius: 5, borderWidth: 0 },
+              { label: 'Iniciam no mês', data: mesesEntrando, backgroundColor: 'rgba(245,158,11,0.65)', borderRadius: 5, borderWidth: 0 }
+            ]
+          },
+          plugins: [pluginBarLabels],
+          options: {
+            responsive: true, maintainAspectRatio: false,
+            responsive: true, maintainAspectRatio: false,
+            plugins: {
+              legend: { position: 'bottom', labels: { color: tc, font: { size: 11 }, boxWidth: 10, padding: 10 } }
+            },
+            scales: {
+              x: { grid: { display: false }, ticks: { color: tc, font: { size: 12 } } },
+              y: { grid: { color: gc }, ticks: { color: tc, font: { size: 10 }, stepSize: 1 }, beginAtZero: true }
+            }
+          }
+        });
+      }
+
+      if (chartPerdasRef.current) chartPerdasRef.current.destroy();
+      const canvasPerdas = canvasPerdasRef.current;
+      if (canvasPerdas) {
+        chartPerdasRef.current = new ChartJS(canvasPerdas, {
+          type: 'line',
+          data: {
+            labels: ['mar. de 26', 'abr. de 26', 'mai. de 26', 'jun. de 26', 'jul. de 26', 'ago. de 26'],
+            datasets: [{ data: [0,0,0,0,0,0], borderColor: 'rgba(14,165,233,0.8)', backgroundColor: 'transparent' }]
+          },
+          options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+              x: { grid: { display: false }, ticks: { color: tc, font: { size: 10 } } },
+              y: { grid: { color: gc }, ticks: { color: tc, font: { size: 10 } }, beginAtZero: true, suggestedMax: 1.0 }
+            }
+          }
+        });
+      }
+
+      if (chartCustoRef.current) chartCustoRef.current.destroy();
+      const canvasCusto = canvasCustoRef.current;
+      if (canvasCusto) {
+        chartCustoRef.current = new ChartJS(canvasCusto, {
+          type: 'bar',
+          data: {
+            labels: [], 
+            datasets: [
+              { label: 'Em campo', data: [], backgroundColor: 'rgba(14,165,233,0.8)' },
+              { label: 'Prejuízo', data: [], backgroundColor: 'rgba(239,68,68,0.8)' }
+            ]
+          },
+          options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { position: 'bottom', labels: { color: tc, font: { size: 11 }, boxWidth: 10, padding: 10 } } },
+            scales: {
+              x: { grid: { display: false }, ticks: { color: tc } },
+              y: { grid: { color: gc }, ticks: { color: tc, font: { size: 10 } }, beginAtZero: true, suggestedMax: 1.0 }
+            }
+          }
+        });
+      }
+
+      if (chartKitsRef.current) chartKitsRef.current.destroy();
+      const canvasKits = canvasKitsDashRef.current;
+      if (canvasKits) {
+        chartKitsRef.current = new ChartJS(canvasKits, {
+          type: 'doughnut',
+          data: {
+            labels: ['Ativos', 'Devolvidos', 'Perda/Furto'],
+            datasets: [{ data: [2, 2, 0], backgroundColor: ['#0284c7', '#cbd5e1', '#ef4444'], borderWidth: 2, borderColor: bgSurface }]
+          },
+          plugins: [pluginDoughnutLabels],
+          options: {
+            responsive: true, maintainAspectRatio: false, cutout: '65%',
+            plugins: { legend: { position: 'bottom', labels: { color: tc, font: { size: 10 }, boxWidth: 8, padding: 10 } } }
+          }
+        });
+      }
+    return () => {
+      if (chartEstadosRef.current) chartEstadosRef.current.destroy();
+      if (chartFuncoesRef.current) chartFuncoesRef.current.destroy();
+      if (chartVeiculosRef.current) chartVeiculosRef.current.destroy();
+      if (chartFeriasDashRef.current) chartFeriasDashRef.current.destroy();
+      if (chartPerdasRef.current) chartPerdasRef.current.destroy();
+      if (chartCustoRef.current) chartCustoRef.current.destroy();
+      if (chartKitsRef.current) chartKitsRef.current.destroy();
+    };
+  }, [chartDataHash]);
+
+  return (
+    <div id="tab-dashboard" className="tab-content active">
+      <div className="section-header">
+        <div>
+          <div className="section-title">Dashboard</div>
+          <div className="section-sub">
+            Região: {regiaoAtual} · {totalTec} técnico{totalTec !== 1 ? 's' : ''} · {totalAtps} ATPs
+          </div>
+        </div>
+      </div>
+
+      <div className="kpi-grid" style={{ marginBottom: '20px' }}>
+        <div className="kpi-card blue">
+          <div className="kpi-label">TOTAL TÉCNICOS</div>
+          <div className="kpi-value">{totalTec}</div>
+          <div className="kpi-sub">Cadastrados</div>
+        </div>
+        <div className="kpi-card green">
+          <div className="kpi-label">TÉCNICOS ATIVOS</div>
+          <div className="kpi-value" style={{ color: 'var(--success)' }}>{tecAtivos}</div>
+          <div className="kpi-sub">Em operação</div>
+        </div>
+        <div className="kpi-card amber">
+          <div className="kpi-label">ATPS ATIVAS</div>
+          <div className="kpi-value">{totalAtps}</div>
+          <div className="kpi-sub">Assistências</div>
+        </div>
+        <div className="kpi-card purple">
+          <div className="kpi-label">ITENS EM ESTOQUE</div>
+          <div className="kpi-value">{totalEstoque}</div>
+          <div className="kpi-sub">Ferramentas</div>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+        <div className="card">
+          <div className="card-header">
+            <div className="card-title">
+              <span className="dot" style={{ background: 'var(--accent)' }}></span>
+              Técnicos por Estado
+            </div>
+          </div>
+          <div style={{ height: '230px', padding: '8px' }}>
+            <canvas id="chart-estados" ref={canvasEstadosRef}></canvas>
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="card-header">
+            <div className="card-title">
+              <span className="dot" style={{ background: 'var(--accent2)' }}></span>
+              Técnicos por Função
+            </div>
+          </div>
+          <div style={{ height: '230px', padding: '8px' }}>
+            <canvas id="chart-funcoes" ref={canvasFuncoesRef}></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+        <div className="card">
+          <div className="card-header">
+            <div className="card-title">
+              <span className="dot" style={{ background: 'var(--success)' }}></span>
+              Status da Frota
+            </div>
+          </div>
+          <div style={{ height: '230px', padding: '8px' }}>
+            <canvas id="chart-veiculos" ref={canvasVeiculosRef}></canvas>
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="card-header">
+            <div className="card-title">
+              <span className="dot" style={{ background: 'var(--warning)' }}></span>
+              Férias | Próximos 60 dias
+            </div>
+          </div>
+          <div style={{ height: '230px', padding: '8px' }}>
+            <canvas id="chart-ferias-dash" ref={canvasFeriasDashRef}></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+        <div className="card">
+          <div className="card-header">
+            <div className="card-title"><span className="dot"></span>Comparativo de ATPs</div>
+          </div>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>ATP</th>
+                  <th>UF</th>
+                  <th>TÉCNICOS</th>
+                  <th>VEÍCULOS</th>
+                  <th>KITS</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(atpsFiltradas.length > 0 ? atpsFiltradas : [
+                  { nome: 'ICLIENT INFORMATICA - (RIO DE JANEIRO)', uf: 'RJ', tec: 0, veic: '-', kits: '-' },
+                  { nome: 'POSITIVO TECNOLOGIA - (BELO HORIZONTE)', uf: 'MG', tec: 0, veic: '-', kits: '-' },
+                  { nome: 'POSITIVO BARUERI', uf: 'SP', tec: 11, veic: 7, kits: '-' }
+                ]).map((a, idx) => (
+                  <tr key={idx}>
+                    <td style={{ fontWeight: 600, fontSize: '11px' }}>{a.nome}</td>
+                    <td><span className="badge badge-gray">{a.uf}</span></td>
+                    <td className="mono">{a.tec}</td>
+                    <td className="mono">{a.veic}</td>
+                    <td className="mono">{a.kits}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="card-header">
+            <div className="card-title"><span className="dot" style={{ background: 'var(--danger)' }}></span>Perdas & Prejuízos | Últimos 6 Meses</div>
+          </div>
+          <div style={{ height: '230px', padding: '8px' }}>
+            <canvas id="chart-perdas" ref={canvasPerdasRef}></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+        <div className="card">
+          <div className="card-header">
+            <div className="card-title"><span className="dot" style={{ background: 'var(--warning)' }}></span>Custo por ATP</div>
+          </div>
+          <div style={{ height: '230px', padding: '8px' }}>
+            <canvas id="chart-custo" ref={canvasCustoRef}></canvas>
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="card-header">
+            <div className="card-title"><span className="dot"></span>Kits Vinculados Recentes</div>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <div style={{ height: '160px', marginTop: '10px' }}>
+              <canvas id="chart-kits" ref={canvasKitsDashRef}></canvas>
+            </div>
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>TÉCNICO</th>
+                    <th>KIT</th>
+                    <th>DT.</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td style={{ fontWeight: 600, fontSize: '11px' }}>VITOR PEREIRA</td>
+                    <td>KIT PADRÃO</td>
+                    <td className="mono">07/05/2026</td>
+                  </tr>
+                  <tr>
+                    <td style={{ fontWeight: 600, fontSize: '11px' }}>VITOR PEREIRA</td>
+                    <td>KIT PADRÃO</td>
+                    <td className="mono">14/05/2026</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
