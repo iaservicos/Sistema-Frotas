@@ -1,31 +1,103 @@
-# Dependências
-node_modules/
-.pnpm-store/
+# ==========================================
+# SGFrotas - Git Ignore Config
+# Stack: FastAPI (Python) + PostgreSQL + React (Vite)
+# ==========================================
 
-# Builds / Produção
+# --- Node / Frontend (React + Vite) ---
+node_modules/
 dist/
 dist-ssr/
+build/
 *.local
-
-# Logs
+.npm
+.eslintcache
+.stylelintcache
+.vite/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
-lerna-debug.log*
 
-# Variáveis de ambiente
+# --- Python / Backend (FastAPI) ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Ambientes virtuais
+env/
+venv/
+.venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Testes e Cobertura
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# IA
+.agents/
+docs/
+walkthrough/
+.gitignore
+.env.example
+
+
+
+# --- Banco de Dados / PostgreSQL / Dumps ---
+*.sql
+*.pgsql
+*.dump
+*.backup
+*.sqlite3
+
+# --- Variáveis de Ambiente & Segredos ---
 .env
-.env.production
-.env.development
+.env.*
 !.env.example
+*.pem
+*.key
+*.cert
+serviceAccountKey.json
+tokens.json
 
-# Arquivos do Sistema e IDE
+# --- Sistema Operacional & IDEs ---
 .DS_Store
 Thumbs.db
-.vscode/
+desktop.ini
+*.swp
+*.swo
+*~
 .idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
 
-# Pastas ignoradas a pedido
-docs/
-.agents/
+# --- Arquivos Temporários & Logs ---
+logs/
+*.log
+*.tmp
+scratch/
+.cache/
