@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: sgfrotas_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: sgfrotas
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d sgfrotas"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  flyway:
+    image: flyway/flyway:10-alpine
+    container_name: sgfrotas_flyway
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: -configFiles=/flyway/conf/flyway.conf migrate
+    volumes:
+      - ./db/migrations:/flyway/sql
+      - ./db/flyway.conf:/flyway/conf/flyway.conf
+
+volumes:
+  postgres_data:
+    name: sgfrotas_postgres_data
